@@ -83,9 +83,9 @@ const defaultSelections = (): Selections =>
 
 /* ─── Camera targets per category ─── */
 const CAM_TARGETS: Record<string, [number, number, number]> = {
-  body:     [5,   1.8, 8],
-  rims:     [3.2, 0.5, 4.2],
-  calipers: [2.4, 0.3, 3.0],
+  body:     [4,   2,   7],
+  rims:     [2.5, 0.6, 3.5],
+  calipers: [2,   0.4, 2.8],
 };
 
 /* ─── Loader ─── */
@@ -105,7 +105,7 @@ function Loader() {
   );
 }
 
-/* ─── 3D Model ─── */
+/* ─── 3D Model with smooth color lerp ─── */
 function SU7Model({
   selections,
   onLoaded,
@@ -117,8 +117,7 @@ function SU7Model({
 
   const clone = useMemo(() => {
     const c = SkeletonUtils.clone(gltf.scene);
-    // Scale from cm → m
-    c.scale.setScalar(0.01);
+
     // Clone every configurable material so we never mutate the cached originals
     c.traverse((child) => {
       if (!(child instanceof THREE.Mesh)) return;
@@ -135,35 +134,80 @@ function SU7Model({
       });
       child.material = Array.isArray(raw) ? next : next[0];
     });
+
+    // Auto-fit: scale to ~5 units along longest axis, ground bottom at y=0
+    const box = new THREE.Box3().setFromObject(c);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const s = 5 / maxDim;
+    c.scale.setScalar(s);
+    c.position.set(-center.x * s, -box.min.y * s, -center.z * s);
+
     return c;
   }, [gltf.scene]);
 
   useEffect(() => { onLoaded(); }, [onLoaded]);
 
-  // Update colors whenever selections change
+  // Target values for smooth lerp — updated instantly when user picks a color
+  const targets = useRef<Record<string, { color: THREE.Color; metalness: number; roughness: number }>>({});
   useEffect(() => {
+    CATEGORIES.forEach((cat) => {
+      const sel = selections[cat.id];
+      targets.current[cat.matName] = {
+        color: new THREE.Color(sel.hex),
+        metalness: sel.metalness,
+        roughness: sel.roughness,
+      };
+    });
+  }, [selections]);
+
+  // Lerp material properties each frame for smooth transitions
+  useFrame(() => {
     clone.traverse((child) => {
       if (!(child instanceof THREE.Mesh)) return;
-      const arr: THREE.Material[] = Array.isArray(child.material)
+      const mats: THREE.Material[] = Array.isArray(child.material)
         ? child.material
         : [child.material];
-      arr.forEach((m) => {
+      mats.forEach((m) => {
         const mat = m as THREE.MeshStandardMaterial;
-        const cat = CATEGORIES.find((c) => c.matName === mat.name);
-        if (!cat) return;
-        const sel = selections[cat.id];
-        mat.color.set(sel.hex);
-        mat.metalness = sel.metalness;
-        mat.roughness = sel.roughness;
+        const t = targets.current[mat.name];
+        if (!t) return;
+        mat.color.lerp(t.color, 0.09);
+        mat.metalness += (t.metalness - mat.metalness) * 0.09;
+        mat.roughness += (t.roughness - mat.roughness) * 0.09;
         mat.needsUpdate = true;
       });
     });
-  }, [selections, clone]);
+  });
 
   return <primitive object={clone} />;
 }
 
 useGLTF.preload("/2024_xiaomi_su7_max.glb");
+
+/* ─── Accent light that subtly echoes the body color ─── */
+function BodyAccentLight({ hex }: { hex: string }) {
+  const lightRef = useRef<THREE.PointLight>(null);
+  const target = useRef(new THREE.Color(hex));
+
+  useEffect(() => { target.current.set(hex); }, [hex]);
+
+  useFrame(() => {
+    if (!lightRef.current) return;
+    lightRef.current.color.lerp(target.current, 0.05);
+  });
+
+  return (
+    <pointLight
+      ref={lightRef}
+      position={[0, 4, -3]}
+      intensity={1.8}
+      distance={12}
+      decay={2}
+    />
+  );
+}
 
 /* ─── Scene ─── */
 function Scene({
@@ -203,15 +247,17 @@ function Scene({
 
   return (
     <>
-      {/* ↓ Critical: sets the Three.js clear color to match section bg */}
       <color attach="background" args={["#0f172a"]} />
 
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[6, 10, 6]}  intensity={1.4} castShadow />
-      <directionalLight position={[-6, 4, -4]} intensity={0.5} color="#b8d4ff" />
-      <spotLight position={[0, 8, 0]} intensity={0.3} angle={0.6} penumbra={1} />
+      <ambientLight intensity={0.35} />
+      <directionalLight position={[6, 10, 6]}  intensity={1.6} castShadow shadow-mapSize={[2048, 2048]} />
+      <directionalLight position={[-6, 4, -4]} intensity={0.6} color="#93c5fd" />
+      <spotLight position={[0, 10, 2]} intensity={0.5} angle={0.5} penumbra={1} />
 
-      <Environment preset="studio" background={false} />
+      {/* Accent light echoes body color */}
+      <BodyAccentLight hex={selections.body.hex} />
+
+      <Environment preset="city" background={false} />
 
       <Suspense fallback={<Loader />}>
         <SU7Model selections={selections} onLoaded={onLoaded} />
@@ -219,18 +265,18 @@ function Scene({
 
       <ContactShadows
         position={[0, 0, 0]}
-        opacity={0.5}
+        opacity={0.65}
         scale={14}
-        blur={2.2}
+        blur={2.5}
         far={3}
-        color="#000"
+        color="#000010"
       />
 
       <OrbitControls
         ref={controlsRef}
         enablePan={false}
-        minDistance={2.5}
-        maxDistance={12}
+        minDistance={2}
+        maxDistance={15}
         maxPolarAngle={Math.PI / 2 - 0.04}
         autoRotate={!userInteracted}
         autoRotateSpeed={0.5}
@@ -273,6 +319,46 @@ function Swatch({
   );
 }
 
+/* ─── UI: config summary bar ─── */
+function ConfigSummary({ selections }: { selections: Selections }) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 16,
+      padding: "8px 20px",
+      background: "rgba(255,255,255,0.04)",
+      backdropFilter: "blur(20px)",
+      borderRadius: 50,
+      border: "1px solid rgba(255,255,255,0.07)",
+    }}>
+      {CATEGORIES.map((cat, i) => {
+        const sel = selections[cat.id];
+        return (
+          <div key={cat.id} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            {i > 0 && (
+              <span style={{ color: "rgba(255,255,255,0.15)", fontSize: "0.65rem" }}>·</span>
+            )}
+            <div style={{
+              width: 10, height: 10, borderRadius: "50%",
+              background: sel.hex,
+              border: "1px solid rgba(255,255,255,0.2)",
+              flexShrink: 0,
+            }} />
+            <span style={{
+              fontSize: "0.65rem",
+              fontFamily: "var(--font-body, sans-serif)",
+              color: "rgba(255,255,255,0.45)",
+              letterSpacing: "0.04em",
+              whiteSpace: "nowrap",
+            }}>
+              {sel.name}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ─── Main export ─── */
 export default function Configurator3D() {
   const [selections,     setSelections]     = useState<Selections>(defaultSelections);
@@ -280,7 +366,23 @@ export default function Configurator3D() {
   const [hoveredName,    setHoveredName]    = useState<string | null>(null);
   const [loaded,         setLoaded]         = useState(false);
   const [userInteracted, setUserInteracted] = useState(false);
+  const [isTouch,        setIsTouch]        = useState(false);
+  const [touchActive,    setTouchActive]    = useState(false);
   const handleLoaded = useCallback(() => setLoaded(true), []);
+
+  useEffect(() => {
+    setIsTouch("ontouchstart" in window || navigator.maxTouchPoints > 0);
+  }, []);
+
+  const enterTouchMode = useCallback(() => {
+    setTouchActive(true);
+    document.body.style.overflow = "hidden";
+  }, []);
+
+  const exitTouchMode = useCallback(() => {
+    setTouchActive(false);
+    document.body.style.overflow = "";
+  }, []);
 
   const activeCat   = CATEGORIES.find((c) => c.id === activeCatId)!;
   const currentSel  = selections[activeCatId];
@@ -290,17 +392,70 @@ export default function Configurator3D() {
   useEffect(() => () => { document.body.style.overflow = ""; }, []);
 
   return (
-    /* Constrained container — not full-width, prevents scroll/zoom conflict */
     <div className="max-w-6xl mx-auto px-6 md:px-12 pb-2">
       <div
         style={{ position: "relative", borderRadius: 24, overflow: "hidden", height: "68vh", minHeight: 480 }}
-        /* Capture scroll inside canvas, prevent page scroll leaking through */
-        onMouseEnter={() => { document.body.style.overflow = "hidden"; }}
-        onMouseLeave={() => { document.body.style.overflow = ""; }}
+        onMouseEnter={() => { if (!isTouch) document.body.style.overflow = "hidden"; }}
+        onMouseLeave={() => { if (!isTouch) document.body.style.overflow = ""; }}
         onWheelCapture={(e) => e.stopPropagation()}
       >
+        {/* Mobile touch overlay — shown until user taps to activate (like Google Maps) */}
+        {isTouch && !touchActive && loaded && (
+          <div
+            onClick={enterTouchMode}
+            style={{
+              position: "absolute", inset: 0, zIndex: 20,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: "rgba(15,23,42,0.45)",
+              backdropFilter: "blur(2px)",
+              cursor: "pointer",
+            }}
+          >
+            <div style={{
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+              padding: "18px 28px",
+              background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.15)",
+              borderRadius: 50,
+              backdropFilter: "blur(20px)",
+            }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <path d="M9 11V6a3 3 0 0 1 6 0v5M5 11h14l-1.5 9h-11L5 11Z" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span style={{ fontSize: "0.75rem", letterSpacing: "0.08em", color: "rgba(255,255,255,0.8)", fontFamily: "var(--font-body, sans-serif)", whiteSpace: "nowrap" }}>
+                Appuyer pour interagir
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Exit touch mode button */}
+        {isTouch && touchActive && (
+          <button
+            onClick={exitTouchMode}
+            style={{
+              position: "absolute", top: 16, left: 16, zIndex: 20,
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "8px 14px",
+              background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.15)",
+              borderRadius: 50,
+              backdropFilter: "blur(20px)",
+              color: "rgba(255,255,255,0.7)",
+              fontSize: "0.7rem",
+              letterSpacing: "0.06em",
+              cursor: "pointer",
+              fontFamily: "var(--font-body, sans-serif)",
+            }}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+              <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            Quitter
+          </button>
+        )}
         <Canvas
-          camera={{ position: [5, 1.8, 8], fov: 42 }}
+          camera={{ position: [4, 2, 7], fov: 45 }}
           shadows
           dpr={[1, 2]}
           gl={{ alpha: false, antialias: true }}
@@ -334,7 +489,11 @@ export default function Configurator3D() {
           position: "absolute", bottom: 24, left: "50%", transform: "translateX(-50%)",
           display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
           opacity: loaded ? 1 : 0, transition: "opacity 0.9s ease",
+          width: "max-content",
         }}>
+          {/* Config summary — all 3 current selections at a glance */}
+          <ConfigSummary selections={selections} />
+
           {/* Category tabs */}
           <div style={{
             display: "flex", gap: 4, padding: "5px",
@@ -374,6 +533,7 @@ export default function Configurator3D() {
             color: "rgba(255,255,255,0.85)",
             margin: 0, letterSpacing: "-0.01em",
             minWidth: 160, textAlign: "center",
+            transition: "opacity 0.2s ease",
           }}>
             {displayName}
           </p>

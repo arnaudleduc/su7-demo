@@ -135,8 +135,23 @@ export default function GallerySection() {
           </p>
         </div>
 
-        {/* Masonry grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4" style={{ gridAutoRows: "240px" }}>
+        {/* Mobile: vertical stack */}
+        <div className="flex flex-col gap-4 md:hidden">
+          {images.map((img, i) => (
+            <GalleryImage
+              key={img.src}
+              src={img.src}
+              alt={img.alt}
+              label={img.label}
+              style={{ height: 260 }}
+              delay={i * 80}
+              parentVisible={isVisible}
+            />
+          ))}
+        </div>
+
+        {/* Desktop: masonry grid */}
+        <div className="hidden md:grid md:grid-cols-3 gap-4" style={{ gridAutoRows: "240px" }}>
           <GalleryImage
             src={images[0].src}
             alt={images[0].alt}

@@ -23,7 +23,7 @@ export default function HeroSection() {
         fill
         priority
         quality={90}
-        style={{ objectFit: "cover", objectPosition: "center" }}
+        style={{ objectFit: "cover", objectPosition: "60% center" }}
       />
 
       {/* Gradient overlay */}
@@ -46,7 +46,7 @@ export default function HeroSection() {
       />
 
       {/* Content */}
-      <div className="relative z-10 h-full flex flex-col justify-center px-8 md:px-20 max-w-7xl mx-auto">
+      <div className="relative z-10 h-full flex flex-col justify-end md:justify-center pb-28 md:pb-0 px-8 md:px-20 max-w-7xl mx-auto">
         {/* Xiaomi badge */}
         <div
           className="inline-flex items-center gap-2 mb-6 px-4 py-2 self-start"
