@@ -92,7 +92,7 @@ export default function ConfiguratorSection() {
         <p style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-body)" }}>
           Modèle 3D :{" "}
           <a
-            href="https://sketchfab.com/3d-models/2024-xiaomi-su7-max-db30dd1e254243b4ba002c6ce65df052"
+            href="https://skfb.ly/pCToS"
             target="_blank"
             rel="noopener noreferrer"
             style={{ color: "rgba(255,255,255,0.35)", textDecoration: "underline" }}

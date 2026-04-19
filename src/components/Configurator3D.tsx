@@ -9,24 +9,80 @@ import {
   useProgress,
   Html,
 } from "@react-three/drei";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import * as THREE from "three";
 import { SkeletonUtils } from "three-stdlib";
 
-/* ─── Color palette ─── */
-const BODY_COLORS = [
-  { name: "Obsidian Black",  hex: "#141414", metalness: 0.85, roughness: 0.12 },
-  { name: "Pearl White",     hex: "#f0ede8", metalness: 0.35, roughness: 0.22 },
-  { name: "Xiaomi Red",      hex: "#dc2626", metalness: 0.55, roughness: 0.18 },
-  { name: "Ocean Blue",      hex: "#1e3a8a", metalness: 0.65, roughness: 0.16 },
-  { name: "Arctic Silver",   hex: "#8fa0b0", metalness: 0.82, roughness: 0.18 },
-  { name: "Champagne Gold",  hex: "#c8a45a", metalness: 0.78, roughness: 0.16 },
+/* ─── Types ─── */
+interface ColorOption {
+  name: string;
+  hex: string;
+  metalness: number;
+  roughness: number;
+}
+
+interface Category {
+  id: string;
+  label: string;
+  matName: string;
+  colors: ColorOption[];
+}
+
+type Selections = Record<string, ColorOption>;
+
+/* ─── Color catalog ─── */
+const CATEGORIES: Category[] = [
+  {
+    id: "body",
+    label: "Carrosserie",
+    matName: "untitledMAT_CarPaint_SU7_Base1",
+    colors: [
+      { name: "Obsidian Black",  hex: "#141414", metalness: 0.85, roughness: 0.12 },
+      { name: "Pearl White",     hex: "#f0ede8", metalness: 0.35, roughness: 0.22 },
+      { name: "Xiaomi Red",      hex: "#dc2626", metalness: 0.55, roughness: 0.18 },
+      { name: "Ocean Blue",      hex: "#1e3a8a", metalness: 0.65, roughness: 0.16 },
+      { name: "Arctic Silver",   hex: "#8fa0b0", metalness: 0.82, roughness: 0.18 },
+      { name: "Champagne Gold",  hex: "#c8a45a", metalness: 0.78, roughness: 0.16 },
+    ],
+  },
+  {
+    id: "rims",
+    label: "Jantes",
+    matName: "untitledMAT_Tire_Hub_127",
+    colors: [
+      { name: "Diamond Silver", hex: "#c0c8d0", metalness: 0.92, roughness: 0.10 },
+      { name: "Gloss Black",    hex: "#141414", metalness: 0.80, roughness: 0.12 },
+      { name: "Gun Metal",      hex: "#3d4552", metalness: 0.88, roughness: 0.14 },
+      { name: "Satin Gold",     hex: "#c8a45a", metalness: 0.80, roughness: 0.18 },
+      { name: "Titanium",       hex: "#7a8a96", metalness: 0.90, roughness: 0.12 },
+    ],
+  },
+  {
+    id: "calipers",
+    label: "Étriers",
+    matName: "untitledMAT_Tire_Brake_331",
+    colors: [
+      { name: "Stealth Black",  hex: "#1a1a1a", metalness: 0.60, roughness: 0.25 },
+      { name: "Xiaomi Red",     hex: "#dc2626", metalness: 0.50, roughness: 0.22 },
+      { name: "Racing Yellow",  hex: "#f59e0b", metalness: 0.45, roughness: 0.22 },
+      { name: "British Green",  hex: "#166534", metalness: 0.50, roughness: 0.24 },
+      { name: "Electric Blue",  hex: "#1d4ed8", metalness: 0.55, roughness: 0.22 },
+    ],
+  },
 ];
-type BodyColor = (typeof BODY_COLORS)[0];
 
-const CAR_PAINT_MAT = "untitledMAT_CarPaint_SU7_Base1";
+const CONFIGURABLE_MATS = new Set(CATEGORIES.map((c) => c.matName));
 
-/* ─── Loader overlay ─── */
+const defaultSelections = (): Selections =>
+  Object.fromEntries(CATEGORIES.map((cat) => [cat.id, cat.colors[0]]));
+
+/* ─── Loader ─── */
 function Loader() {
   const { progress } = useProgress();
   return (
@@ -35,7 +91,7 @@ function Loader() {
         <div style={{ width: 180, height: 2, background: "rgba(255,255,255,0.1)", borderRadius: 2, overflow: "hidden" }}>
           <div style={{ height: "100%", width: `${progress}%`, background: "#dc2626", borderRadius: 2, transition: "width 0.3s ease" }} />
         </div>
-        <span style={{ fontSize: "0.7rem", letterSpacing: "0.1em", color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-body)" }}>
+        <span style={{ fontSize: "0.7rem", letterSpacing: "0.1em", color: "rgba(255,255,255,0.45)", fontFamily: "var(--font-body)" }}>
           {Math.round(progress)}%
         </span>
       </div>
@@ -44,18 +100,24 @@ function Loader() {
 }
 
 /* ─── 3D Model ─── */
-function SU7Model({ bodyColor, onLoaded }: { bodyColor: BodyColor; onLoaded: () => void }) {
+function SU7Model({
+  selections,
+  onLoaded,
+}: {
+  selections: Selections;
+  onLoaded: () => void;
+}) {
   const gltf = useGLTF("/2024_xiaomi_su7_max.glb");
 
   const clone = useMemo(() => {
     const c = SkeletonUtils.clone(gltf.scene);
-    // Clone the car paint material so we never mutate the cached original
+    // Clone every configurable material so we never mutate the cached originals
     c.traverse((child) => {
       if (child instanceof THREE.Mesh && child.material) {
         const mat = child.material as THREE.MeshStandardMaterial;
-        if (mat.name === CAR_PAINT_MAT) {
+        if (CONFIGURABLE_MATS.has(mat.name)) {
           child.material = mat.clone();
-          child.material.name = CAR_PAINT_MAT;
+          child.material.name = mat.name;
         }
       }
     });
@@ -64,20 +126,21 @@ function SU7Model({ bodyColor, onLoaded }: { bodyColor: BodyColor; onLoaded: () 
 
   useEffect(() => { onLoaded(); }, [onLoaded]);
 
-  // Update color & finish whenever the selection changes
+  // Apply all color selections on every change
   useEffect(() => {
     clone.traverse((child) => {
       if (child instanceof THREE.Mesh && child.material) {
         const mat = child.material as THREE.MeshStandardMaterial;
-        if (mat.name === CAR_PAINT_MAT) {
-          mat.color.set(bodyColor.hex);
-          mat.metalness  = bodyColor.metalness;
-          mat.roughness  = bodyColor.roughness;
-          mat.needsUpdate = true;
-        }
+        const category = CATEGORIES.find((c) => c.matName === mat.name);
+        if (!category) return;
+        const sel = selections[category.id];
+        mat.color.set(sel.hex);
+        mat.metalness  = sel.metalness;
+        mat.roughness  = sel.roughness;
+        mat.needsUpdate = true;
       }
     });
-  }, [bodyColor, clone]);
+  }, [selections, clone]);
 
   return (
     <group dispose={null} scale={0.01}>
@@ -89,7 +152,13 @@ function SU7Model({ bodyColor, onLoaded }: { bodyColor: BodyColor; onLoaded: () 
 useGLTF.preload("/2024_xiaomi_su7_max.glb");
 
 /* ─── Scene ─── */
-function Scene({ bodyColor, onLoaded }: { bodyColor: BodyColor; onLoaded: () => void }) {
+function Scene({
+  selections,
+  onLoaded,
+}: {
+  selections: Selections;
+  onLoaded: () => void;
+}) {
   const [userInteracted, setUserInteracted] = useState(false);
 
   return (
@@ -102,17 +171,10 @@ function Scene({ bodyColor, onLoaded }: { bodyColor: BodyColor; onLoaded: () => 
       <Environment preset="studio" background={false} />
 
       <Suspense fallback={<Loader />}>
-        <SU7Model bodyColor={bodyColor} onLoaded={onLoaded} />
+        <SU7Model selections={selections} onLoaded={onLoaded} />
       </Suspense>
 
-      <ContactShadows
-        position={[0, 0, 0]}
-        opacity={0.5}
-        scale={14}
-        blur={2.2}
-        far={3}
-        color="#000"
-      />
+      <ContactShadows position={[0, 0, 0]} opacity={0.5} scale={14} blur={2.2} far={3} color="#000" />
 
       <OrbitControls
         enablePan={false}
@@ -127,66 +189,36 @@ function Scene({ bodyColor, onLoaded }: { bodyColor: BodyColor; onLoaded: () => 
   );
 }
 
-/* ─── UI: color swatch ─── */
-function ColorSwatch({ color, selected, onClick, onHover }: {
-  color: BodyColor;
-  selected: boolean;
-  onClick: () => void;
-  onHover: (name: string | null) => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => onHover(color.name)}
-      onMouseLeave={() => onHover(null)}
-      aria-label={color.name}
-      style={{
-        width:  selected ? 34 : 26,
-        height: selected ? 34 : 26,
-        borderRadius: "50%",
-        background: color.hex,
-        border: selected ? "2.5px solid rgba(255,255,255,0.9)" : "2px solid rgba(255,255,255,0.2)",
-        boxShadow: selected
-          ? `0 0 0 3px rgba(255,255,255,0.2), 0 4px 14px rgba(0,0,0,0.5)`
-          : "0 2px 6px rgba(0,0,0,0.4)",
-        cursor: "pointer",
-        flexShrink: 0,
-        transition: "all 0.25s cubic-bezier(0.16,1,0.3,1)",
-        transform: selected ? "scale(1)" : "scale(0.88)",
-      }}
-    />
-  );
-}
-
-/* ─── Main export ─── */
+/* ─── UI ─── */
 export default function Configurator3D() {
-  const [selected, setSelected]   = useState(BODY_COLORS[0]);
-  const [hovered,  setHovered]    = useState<string | null>(null);
-  const [loaded,   setLoaded]     = useState(false);
-  const handleLoaded              = useCallback(() => setLoaded(true), []);
+  const [selections,      setSelections]      = useState<Selections>(defaultSelections);
+  const [activeCatId,     setActiveCatId]     = useState(CATEGORIES[0].id);
+  const [hoveredName,     setHoveredName]     = useState<string | null>(null);
+  const [loaded,          setLoaded]          = useState(false);
 
-  const displayName = hovered ?? selected.name;
+  const handleLoaded  = useCallback(() => setLoaded(true), []);
+  const activeCategory = CATEGORIES.find((c) => c.id === activeCatId)!;
+  const currentSel    = selections[activeCatId];
+  const displayName   = hoveredName ?? currentSel.name;
+
+  const selectColor = (color: ColorOption) =>
+    setSelections((prev) => ({ ...prev, [activeCatId]: color }));
 
   return (
     <div style={{ position: "relative", width: "100%", height: "75vh", minHeight: 500 }}>
-      {/* 3D Canvas */}
-      <Canvas
-        camera={{ position: [5, 1.8, 8], fov: 42 }}
-        shadows
-        dpr={[1, 2]}
-        style={{ background: "transparent" }}
-      >
-        <Scene bodyColor={selected} onLoaded={handleLoaded} />
+      {/* Canvas */}
+      <Canvas camera={{ position: [5, 1.8, 8], fov: 42 }} shadows dpr={[1, 2]} style={{ background: "transparent" }}>
+        <Scene selections={selections} onLoaded={handleLoaded} />
       </Canvas>
 
       {/* Drag hint */}
       <div style={{
         position: "absolute", top: 20, right: 24,
         display: "flex", alignItems: "center", gap: 6,
-        opacity: loaded ? 0.45 : 0, transition: "opacity 1.2s ease 1s",
+        opacity: loaded ? 0.4 : 0, transition: "opacity 1.2s ease 1s",
         pointerEvents: "none",
       }}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
           <path d="M8 3l4-2 4 2M8 21l4 2 4-2M3 8l-2 4 2 4M21 8l2 4-2 4" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
         </svg>
         <span style={{ fontSize: "0.68rem", letterSpacing: "0.1em", color: "rgba(255,255,255,0.6)", fontFamily: "var(--font-body)" }}>
@@ -194,43 +226,98 @@ export default function Configurator3D() {
         </span>
       </div>
 
-      {/* Color picker */}
+      {/* Configurator panel */}
       <div style={{
         position: "absolute", bottom: 28, left: "50%", transform: "translateX(-50%)",
-        display: "flex", flexDirection: "column", alignItems: "center", gap: 12,
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
         opacity: loaded ? 1 : 0, transition: "opacity 0.9s ease",
       }}>
+        {/* Category tabs */}
+        <div style={{
+          display: "flex", gap: 4,
+          padding: "5px",
+          background: "rgba(255,255,255,0.05)",
+          backdropFilter: "blur(20px)",
+          borderRadius: 50,
+          border: "1px solid rgba(255,255,255,0.08)",
+        }}>
+          {CATEGORIES.map((cat) => {
+            const isActive = cat.id === activeCatId;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => { setActiveCatId(cat.id); setHoveredName(null); }}
+                style={{
+                  padding: "7px 16px",
+                  borderRadius: 50,
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: "0.72rem",
+                  fontWeight: 600,
+                  letterSpacing: "0.06em",
+                  fontFamily: "var(--font-body)",
+                  transition: "all 0.25s cubic-bezier(0.16,1,0.3,1)",
+                  background: isActive ? "rgba(255,255,255,0.14)" : "transparent",
+                  color: isActive ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.4)",
+                  boxShadow: isActive ? "inset 0 1px 0 rgba(255,255,255,0.1)" : "none",
+                }}
+              >
+                {cat.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Color name */}
         <p style={{
           fontFamily: "var(--font-heading), Georgia, serif",
           fontStyle: "italic",
-          fontSize: "1.05rem",
-          color: "rgba(255,255,255,0.88)",
+          fontSize: "1rem",
+          color: "rgba(255,255,255,0.85)",
           margin: 0,
           letterSpacing: "-0.01em",
-          transition: "opacity 0.15s ease",
-          minWidth: 180,
+          minWidth: 160,
           textAlign: "center",
+          transition: "opacity 0.15s ease",
         }}>
           {displayName}
         </p>
 
+        {/* Swatches */}
         <div style={{
           display: "flex", alignItems: "center", gap: 10,
           padding: "12px 20px",
           background: "rgba(255,255,255,0.05)",
           backdropFilter: "blur(20px)",
           borderRadius: 50,
-          border: "1px solid rgba(255,255,255,0.09)",
+          border: "1px solid rgba(255,255,255,0.08)",
         }}>
-          {BODY_COLORS.map((c) => (
-            <ColorSwatch
-              key={c.name}
-              color={c}
-              selected={selected.name === c.name}
-              onClick={() => setSelected(c)}
-              onHover={setHovered}
-            />
-          ))}
+          {activeCategory.colors.map((color) => {
+            const isSelected = currentSel.name === color.name;
+            return (
+              <button
+                key={color.name}
+                onClick={() => selectColor(color)}
+                onMouseEnter={() => setHoveredName(color.name)}
+                onMouseLeave={() => setHoveredName(null)}
+                aria-label={color.name}
+                style={{
+                  width:      isSelected ? 34 : 26,
+                  height:     isSelected ? 34 : 26,
+                  borderRadius: "50%",
+                  background: color.hex,
+                  border:     isSelected ? "2.5px solid rgba(255,255,255,0.9)" : "2px solid rgba(255,255,255,0.2)",
+                  boxShadow:  isSelected
+                    ? "0 0 0 3px rgba(255,255,255,0.18), 0 4px 14px rgba(0,0,0,0.5)"
+                    : "0 2px 6px rgba(0,0,0,0.35)",
+                  cursor: "pointer",
+                  flexShrink: 0,
+                  transition: "all 0.25s cubic-bezier(0.16,1,0.3,1)",
+                  transform:  isSelected ? "scale(1)" : "scale(0.88)",
+                }}
+              />
+            );
+          })}
         </div>
       </div>
     </div>
