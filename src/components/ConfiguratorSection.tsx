@@ -92,21 +92,21 @@ export default function ConfiguratorSection() {
         <p style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-body)" }}>
           Modèle 3D :{" "}
           <a
-            href="https://skfb.ly/oQMoo"
+            href="https://sketchfab.com/3d-models/2024-xiaomi-su7-max-db30dd1e254243b4ba002c6ce65df052"
             target="_blank"
             rel="noopener noreferrer"
             style={{ color: "rgba(255,255,255,0.35)", textDecoration: "underline" }}
           >
-            Su7-xiaomini
+            2024 Xiaomi SU7 Max
           </a>{" "}
-          by corvo27 — licensed under{" "}
+          by Ddiaz Design — licensed under{" "}
           <a
-            href="http://creativecommons.org/licenses/by/4.0/"
+            href="http://creativecommons.org/licenses/by-nc-sa/4.0/"
             target="_blank"
             rel="noopener noreferrer"
             style={{ color: "rgba(255,255,255,0.35)", textDecoration: "underline" }}
           >
-            CC BY 4.0
+            CC BY-NC-SA 4.0
           </a>
         </p>
       </div>
