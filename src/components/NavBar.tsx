@@ -5,8 +5,8 @@ import { useEffect, useState } from "react";
 const links = [
   { label: "Specs", href: "#specs" },
   { label: "Design", href: "#design" },
+  { label: "Configurateur", href: "#configurateur" },
   { label: "Motorisation", href: "#motorisation" },
-  { label: "Réserver", href: "#reserver" },
 ];
 
 export default function NavBar() {
